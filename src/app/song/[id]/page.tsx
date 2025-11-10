@@ -8,6 +8,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import NowPlayingSidebar from '@/components/layout/NowPlayingSidebar';
 import PlayerBar from '@/components/layout/PlayerBar';
 import SongCard from '@/components/SongCard';
+import AudioPreview from '@/components/AudioPreview';
 
 export default function SongDetailsPage() {
   const params = useParams();
@@ -294,6 +295,8 @@ export default function SongDetailsPage() {
                   </a>
                 )}
               </div>
+              {/* Audio preview / fallback UI */}
+              <AudioPreview song={song as any} />
             </div>
           </div>
 
