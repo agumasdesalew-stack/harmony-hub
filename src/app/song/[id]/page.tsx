@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Heart, Share2, ExternalLink } from 'lucide-react';
 import { Song } from '@/types';
@@ -20,57 +20,170 @@ export default function SongDetailsPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [queue, setQueue] = useState<Song[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const initializeAudio = useCallback(() => {
+    if (!audioRef.current) {
+      const audio = new Audio();
+      audioRef.current = audio;
+      const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+      const handleEnded = () => setIsPlaying(false);
+      audio.addEventListener('timeupdate', handleTimeUpdate);
+      audio.addEventListener('ended', handleEnded);
+    }
+  }, []);
 
   useEffect(() => {
-    // Fetch song details
-    const fetchSong = async () => {
-      try {
-        // In a real app, you'd fetch from your API
-        // For now, using mock data
-        const mockSong: Song = {
-          id: params.id as string,
-          name: 'Blinding Lights',
-          artist: 'The Weeknd',
-          album: 'After Hours',
-          albumArt: '/api/placeholder/400/400',
-          previewUrl: null,
-          duration: 200,
-          spotifyUrl: 'https://open.spotify.com/track/1',
-        };
-        setSong(mockSong);
+    initializeAudio();
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    };
+  }, [initializeAudio]);
 
-        // Fetch similar tracks
-        const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(mockSong.artist)}`);
-        const data = await response.json();
-        if (data.tracks?.items) {
-          const tracks: Song[] = data.tracks.items
-            .slice(0, 6)
-            .map((track: any) => ({
-              id: track.id,
-              name: track.name,
-              artist: track.artists[0]?.name || 'Unknown Artist',
-              album: track.album.name,
-              albumArt: track.album.images[0]?.url || '/api/placeholder/300/300',
-              previewUrl: track.preview_url,
-              duration: Math.floor(track.duration_ms / 1000),
-              spotifyUrl: track.external_urls.spotify,
-            }));
-          setSimilarTracks(tracks);
+  useEffect(() => {
+    const fetchSong = async () => {
+      if (!params.id) return;
+      setIsLoading(true);
+      setErrorMessage(null);
+      try {
+        const response = await fetch(`/api/spotify/track/${params.id}`);
+        if (!response.ok) {
+          if (response.status === 404) {
+            setSong(null);
+            setSimilarTracks([]);
+            return;
+          }
+          throw new Error('Failed to load song details');
+        }
+        const trackData = await response.json();
+        const mainSong: Song = {
+          id: trackData.id,
+          name: trackData.name,
+          artist: trackData.artists?.map((artist: any) => artist.name).join(', ') || 'Unknown Artist',
+          album: trackData.album?.name ?? 'Unknown Album',
+          albumArt: trackData.album?.images?.[0]?.url ?? '/api/placeholder/400/400',
+          previewUrl: trackData.preview_url,
+          duration: Math.floor(trackData.duration_ms / 1000),
+          spotifyUrl: trackData.external_urls?.spotify,
+        };
+        setSong(mainSong);
+        setQueue([mainSong]);
+
+        if (trackData.artists?.length) {
+          const primaryArtist = trackData.artists[0]?.name;
+          const similarResponse = await fetch(
+            `/api/spotify/search?q=${encodeURIComponent(primaryArtist)}`
+          );
+          const similarData = await similarResponse.json();
+          if (similarData.tracks?.items) {
+            const tracks: Song[] = similarData.tracks.items
+              .filter((track: any) => track.id !== mainSong.id)
+              .slice(0, 6)
+              .map((track: any) => ({
+                id: track.id,
+                name: track.name,
+                artist: track.artists[0]?.name || 'Unknown Artist',
+                album: track.album.name,
+                albumArt: track.album.images[0]?.url || '/api/placeholder/300/300',
+                previewUrl: track.preview_url,
+                duration: Math.floor(track.duration_ms / 1000),
+                spotifyUrl: track.external_urls.spotify,
+              }));
+            setSimilarTracks(tracks);
+          }
+        } else {
+          setSimilarTracks([]);
         }
 
-        // Fetch lyrics (would use Musixmatch API in production)
         setLyrics('Lyrics would be fetched from Musixmatch API...');
       } catch (error) {
         console.error('Error fetching song:', error);
+        setErrorMessage(
+          error instanceof Error ? error.message : 'Unable to load song details right now.'
+        );
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (params.id) {
-      fetchSong();
-    }
+    fetchSong();
   }, [params.id]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    if (!currentSong?.previewUrl) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      setCurrentTime(0);
+      return;
+    }
+
+    audioRef.current.src = currentSong.previewUrl;
+    audioRef.current.currentTime = 0;
+
+    if (isPlaying) {
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch((err) => {
+          console.error('Audio playback failed:', err);
+          setIsPlaying(false);
+          setErrorMessage('Unable to play preview. Please try again later.');
+        });
+    }
+  }, [currentSong?.id]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    if (!currentSong?.previewUrl) return;
+    if (isPlaying) {
+      audioRef.current
+        .play()
+        .catch((err) => {
+          console.error('Audio playback failed:', err);
+          setIsPlaying(false);
+        });
+    } else {
+      audioRef.current.pause();
+    }
+  }, [isPlaying, currentSong?.previewUrl]);
+
+  const handlePlayTrack = useCallback(
+    (track: Song) => {
+      if (!track.previewUrl || !audioRef.current) {
+        setErrorMessage('Spotify does not provide a playable preview for this track.');
+        return;
+      }
+
+      const canPlay =
+        audioRef.current.canPlayType('audio/mpeg') ||
+        audioRef.current.canPlayType('audio/aac') ||
+        audioRef.current.canPlayType('audio/ogg');
+
+      if (!canPlay) {
+        setErrorMessage('Your browser cannot play this preview format.');
+        return;
+      }
+
+      setCurrentSong(track);
+      setQueue([track, ...similarTracks.filter((t) => t.id !== track.id)]);
+      setIsPlaying(true);
+      setErrorMessage(null);
+    },
+    [similarTracks]
+  );
+
+  const handleTogglePlay = () => {
+    if (!currentSong?.previewUrl) {
+      setErrorMessage('No preview available for this track.');
+      return;
+    }
+    setIsPlaying((prev) => !prev);
+  };
 
   if (isLoading) {
     return (
@@ -142,12 +255,24 @@ export default function SongDetailsPage() {
               <p className="text-xl text-zinc-600 dark:text-zinc-400 mb-6">
                 {song.artist} • {song.album}
               </p>
+              {errorMessage && (
+                <p className="mb-4 text-sm text-red-400">{errorMessage}</p>
+              )}
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setCurrentSong(song)}
-                  className="px-6 py-3 rounded-full bg-yellow-500 hover:bg-yellow-600 text-zinc-900 font-semibold transition-colors"
+                  onClick={() =>
+                    currentSong?.id === song.id && isPlaying
+                      ? handleTogglePlay()
+                      : handlePlayTrack(song)
+                  }
+                  className="px-6 py-3 rounded-full bg-yellow-500 hover:bg-yellow-600 text-zinc-900 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!song.previewUrl}
                 >
-                  Play
+                  {song.previewUrl
+                    ? currentSong?.id === song.id && isPlaying
+                      ? 'Pause'
+                      : 'Play'
+                    : 'Preview Unavailable'}
                 </button>
                 <button className="p-3 rounded-full bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors">
                   <Heart size={20} className="text-zinc-900 dark:text-white" />
@@ -195,7 +320,7 @@ export default function SongDetailsPage() {
                   <SongCard
                     key={track.id}
                     song={track}
-                    onPlay={setCurrentSong}
+                    onPlay={handlePlayTrack}
                   />
                 ))}
               </div>
@@ -209,7 +334,7 @@ export default function SongDetailsPage() {
       <PlayerBar
         currentSong={currentSong}
         isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(!isPlaying)}
+        onPlayPause={handleTogglePlay}
         onNext={() => {}}
         onPrevious={() => {}}
         currentTime={currentTime}

@@ -17,6 +17,7 @@ export interface Playlist {
   createdAt: string;
   userId: string;
   isPublic: boolean;
+  likes?: number;
 }
 
 export interface User {

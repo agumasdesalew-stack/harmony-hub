@@ -11,6 +11,10 @@ export default function CuratedPlaylistCard({ playlist }: CuratedPlaylistCardPro
   const totalDuration = playlist.songs.reduce((acc, song) => acc + song.duration, 0);
   const minutes = Math.floor(totalDuration / 60);
   const seconds = totalDuration % 60;
+  const likeCount =
+    playlist.likes !== undefined
+      ? playlist.likes
+      : 100000 + Math.min(playlist.songs.length * 1200, 50000);
 
   return (
     <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-orange-600 to-amber-700 p-8 text-white">
@@ -23,7 +27,7 @@ export default function CuratedPlaylistCard({ playlist }: CuratedPlaylistCardPro
         <div className="flex items-center gap-6 text-sm">
           <div className="flex items-center gap-2">
             <Heart size={16} />
-            <span>{Math.floor(Math.random() * 100000).toLocaleString()} Likes</span>
+            <span>{likeCount.toLocaleString()} Likes</span>
           </div>
           <div>{playlist.songs.length} Songs</div>
           <div className="flex items-center gap-2">

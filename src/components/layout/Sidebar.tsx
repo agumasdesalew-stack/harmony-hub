@@ -18,7 +18,7 @@ const navigationItems = [
   { name: 'Songs', href: '/songs', icon: Music },
   { name: 'Albums', href: '/albums', icon: Disc },
   { name: 'Artists', href: '/artists', icon: Users },
-  { name: 'Radio', href: '/radio', icon: Radio },
+ 
 ];
 
 const myMusicItems = [

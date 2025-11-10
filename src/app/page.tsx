@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import NowPlayingSidebar from '@/components/layout/NowPlayingSidebar';
 import PlayerBar from '@/components/layout/PlayerBar';
@@ -21,6 +21,8 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(0);
   const [queue, setQueue] = useState<Song[]>([]);
   const [showPlaylistCreator, setShowPlaylistCreator] = useState(false);
+  const [playerError, setPlayerError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const { playlists, createPlaylist } = usePlaylists();
 
   // Mock curated playlist
@@ -32,38 +34,99 @@ export default function Home() {
     createdAt: new Date().toISOString(),
     userId: '',
     isPublic: true,
+    likes: 98802,
   };
 
-  // Mock popular artists
-  const popularArtists: Array<{ id: string; name: string; image: string }> = [
-    { id: '1', name: 'The Creator', image: '/api/placeholder/150/150' },
-    { id: '2', name: '21 Savage', image: '/api/placeholder/150/150' },
-    { id: '3', name: '6ix9ine', image: '/api/placeholder/150/150' },
+  // Mock artists
+  const artists = [
+    { id: '1', name: 'The Weeknd', image: '/api/placeholder/150/150' },
+    { id: '2', name: 'Drake', image: '/api/placeholder/150/150' },
+    { id: '3', name: 'Billie Eilish', image: '/api/placeholder/150/150' },
     { id: '4', name: 'Travis Scott', image: '/api/placeholder/150/150' },
     { id: '5', name: 'OBLADAET', image: '/api/placeholder/150/150' },
-  };
+  ];
 
   // Mock recently played
   const recentlyPlayed: Song[] = [
     {
       id: '1',
-      name: 'Mr. Right Now',
-      artist: 'Metro Boomin',
-      album: 'Savage Mode II',
-      albumArt: '/api/placeholder/64/64',
-      previewUrl: null,
-      duration: 201,
+      name: 'Blinding Lights',
+      artist: 'The Weeknd',
+      album: 'After Hours',
+      albumArt: '/api/placeholder/300/300',
+      previewUrl: 'https://example.com/preview.mp3',
+      duration: 200,
     },
     {
       id: '2',
-      name: 'Many Men',
-      artist: '21 Savage',
-      album: 'Savage Mode II',
-      albumArt: '/api/placeholder/64/64',
+      name: 'Save Your Tears',
+      artist: 'The Weeknd',
+      album: 'After Hours',
+      albumArt: '/api/placeholder/300/300',
       previewUrl: null,
-      duration: 149,
+      duration: 215,
     },
   ];
+
+  const initializeAudio = useCallback(() => {
+    if (!audioRef.current) {
+      const audio = new Audio();
+      audioRef.current = audio;
+      const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+      const handleEnded = () => setIsPlaying(false);
+      audio.addEventListener('timeupdate', handleTimeUpdate);
+      audio.addEventListener('ended', handleEnded);
+    }
+  }, []);
+
+  useEffect(() => {
+    initializeAudio();
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    };
+  }, [initializeAudio]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    if (!currentSong?.previewUrl) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      setCurrentTime(0);
+      return;
+    }
+
+    audioRef.current.src = currentSong.previewUrl;
+    audioRef.current.currentTime = 0;
+
+    if (isPlaying) {
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch((err) => {
+          console.error('Audio playback failed:', err);
+          setIsPlaying(false);
+          setPlayerError('Unable to play preview. Please try again later.');
+        });
+    }
+  }, [currentSong?.id]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    if (!currentSong?.previewUrl) return;
+    if (isPlaying) {
+      audioRef.current
+        .play()
+        .catch((err) => {
+          console.error('Audio playback failed:', err);
+          setIsPlaying(false);
+        });
+    } else {
+      audioRef.current.pause();
+    }
+  }, [isPlaying, currentSong?.previewUrl]);
 
   const handleSearch = async (query: string) => {
     try {
@@ -87,9 +150,66 @@ export default function Home() {
     }
   };
 
-  const handlePlaySong = (song: Song) => {
+  const handlePlaySong = (song: Song, sourceQueue: Song[] = []) => {
+    if (!song.previewUrl || !audioRef.current) {
+      setPlayerError('Spotify does not provide a playable preview for this track.');
+      return;
+    }
+
+    const canPlay =
+      audioRef.current.canPlayType('audio/mpeg') ||
+      audioRef.current.canPlayType('audio/aac') ||
+      audioRef.current.canPlayType('audio/ogg');
+
+    if (!canPlay) {
+      setPlayerError('Your browser cannot play this preview format.');
+      return;
+    }
+
+    const normalizedQueue = sourceQueue.length ? sourceQueue : [song];
+    const orderedQueue = [
+      song,
+      ...normalizedQueue.filter((queuedSong) => queuedSong.id !== song.id),
+    ];
+
+    setQueue(orderedQueue);
     setCurrentSong(song);
     setIsPlaying(true);
+    setPlayerError(null);
+  };
+
+  const handleTogglePlay = () => {
+    if (!currentSong?.previewUrl) {
+      setPlayerError('No preview available for this track.');
+      return;
+    }
+    setIsPlaying((prev) => !prev);
+  };
+
+  const handleNext = () => {
+    if (!currentSong || queue.length === 0) return;
+    const currentIndex = queue.findIndex((track) => track.id === currentSong.id);
+    const nextTrack = queue[currentIndex + 1];
+    if (nextTrack) {
+      handlePlaySong(nextTrack, queue);
+    } else {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (!currentSong || queue.length === 0) return;
+    const currentIndex = queue.findIndex((track) => track.id === currentSong.id);
+    const previousTrack = queue[currentIndex - 1];
+    if (previousTrack) {
+      handlePlaySong(previousTrack, queue);
+    } else {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+      }
+      setCurrentTime(0);
+    }
   };
 
   return (
@@ -146,6 +266,9 @@ export default function Home() {
                   Create Playlist
                 </button>
               </div>
+              {playerError && (
+                <p className="mt-3 text-sm text-red-400">{playerError}</p>
+              )}
             </div>
           </div>
 
@@ -167,7 +290,7 @@ export default function Home() {
                   <SongCard
                     key={song.id}
                     song={song}
-                    onPlay={handlePlaySong}
+                    onPlay={(selectedSong) => handlePlaySong(selectedSong, searchResults)}
                   />
                 ))}
               </div>
@@ -186,7 +309,7 @@ export default function Home() {
                 </button>
               </div>
               <div className="flex gap-4 overflow-x-auto pb-4">
-                {popularArtists.map((artist) => (
+                {artists.map((artist) => (
                   <div key={artist.id} className="flex-shrink-0 text-center">
                     <div className="w-32 h-32 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-800 mb-2">
                       <img
@@ -220,7 +343,7 @@ export default function Home() {
                   <div
                     key={song.id}
                     className="flex items-center gap-4 p-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                    onClick={() => handlePlaySong(song)}
+                    onClick={() => handlePlaySong(song, recentlyPlayed)}
                   >
                     <div className="w-12 h-12 rounded overflow-hidden bg-zinc-200 dark:bg-zinc-800 flex-shrink-0">
                       <img
@@ -257,9 +380,9 @@ export default function Home() {
       <PlayerBar
         currentSong={currentSong}
         isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(!isPlaying)}
-        onNext={() => {}}
-        onPrevious={() => {}}
+        onPlayPause={handleTogglePlay}
+        onNext={handleNext}
+        onPrevious={handlePrevious}
         currentTime={currentTime}
         duration={currentSong?.duration || 0}
       />
