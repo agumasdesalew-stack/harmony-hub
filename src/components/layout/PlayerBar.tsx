@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useState } from 'react';
 import {
@@ -11,27 +11,10 @@ import {
   Volume2,
   MoreHorizontal,
 } from 'lucide-react';
-import { Song } from '@/types';
+import { usePlayer } from '@/contexts/PlayerContext';
 
-interface PlayerBarProps {
-  currentSong?: Song;
-  isPlaying: boolean;
-  onPlayPause: () => void;
-  onNext: () => void;
-  onPrevious: () => void;
-  currentTime: number;
-  duration: number;
-}
-
-export default function PlayerBar({
-  currentSong,
-  isPlaying,
-  onPlayPause,
-  onNext,
-  onPrevious,
-  currentTime,
-  duration,
-}: PlayerBarProps) {
+export default function PlayerBar() {
+  const { currentSong, isPlaying, toggle, next, previous, currentTime, duration } = usePlayer();
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -69,13 +52,13 @@ export default function PlayerBar({
               <Shuffle size={18} />
             </button>
             <button
-              onClick={onPrevious}
+              onClick={previous}
               className="text-zinc-400 hover:text-white transition-colors"
             >
               <SkipBack size={20} />
             </button>
             <button
-              onClick={onPlayPause}
+              onClick={toggle}
               className="w-10 h-10 rounded-full bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center transition-colors"
             >
               {isPlaying ? (
@@ -85,7 +68,7 @@ export default function PlayerBar({
               )}
             </button>
             <button
-              onClick={onNext}
+              onClick={next}
               className="text-zinc-400 hover:text-white transition-colors"
             >
               <SkipForward size={20} />

@@ -18,15 +18,7 @@ async function getSpotifyAccessToken() {
   });
 
   if (!tokenResponse.ok) {
-    // capture upstream body to help diagnose invalid credentials, rate limits, etc.
-    let bodyText: string;
-    try {
-      bodyText = await tokenResponse.text();
-    } catch (e) {
-      bodyText = '<unable to read body>';
-    }
-    console.error('Spotify token endpoint error:', tokenResponse.status, bodyText);
-    throw new Error(`Failed to retrieve Spotify access token: ${bodyText}`);
+    throw new Error('Failed to retrieve Spotify access token');
   }
 
   const tokenData = await tokenResponse.json();
@@ -73,15 +65,7 @@ export async function GET(
     }
 
     if (!trackResponse.ok) {
-      // surface upstream body for easier debugging (also logged server-side)
-      let bodyText: string;
-      try {
-        bodyText = await trackResponse.text();
-      } catch (e) {
-        bodyText = '<unable to read body>';
-      }
-      console.error('Spotify track endpoint error:', trackResponse.status, bodyText);
-      throw new Error(`Failed to fetch track details from Spotify: ${bodyText}`);
+      throw new Error('Failed to fetch track details from Spotify');
     }
 
     const trackData = await trackResponse.json();

@@ -2,13 +2,18 @@
 
 import { Music } from 'lucide-react';
 import { Song } from '@/types';
+import { usePlayer } from '@/contexts/PlayerContext';
 
 interface NowPlayingSidebarProps {
   currentSong?: Song;
-  queue: Song[];
+  queue?: Song[];
 }
 
 export default function NowPlayingSidebar({ currentSong, queue }: NowPlayingSidebarProps) {
+  const player = usePlayer();
+  const activeSong = currentSong ?? player.currentSong;
+  const activeQueue = queue ?? player.queue;
+
   return (
     <aside className="w-80 bg-zinc-50 dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 h-screen fixed right-0 top-0 overflow-y-auto">
       <div className="p-6">
@@ -17,12 +22,12 @@ export default function NowPlayingSidebar({ currentSong, queue }: NowPlayingSide
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Now Playing</h2>
         </div>
 
-        {currentSong && (
+        {activeSong && (
           <div className="mb-8">
             <div className="aspect-square w-full rounded-lg overflow-hidden mb-4 bg-zinc-200 dark:bg-zinc-800">
               <img
-                src={currentSong.albumArt || '/api/placeholder/400/400'}
-                alt={currentSong.album}
+                src={activeSong.albumArt || '/api/placeholder/400/400'}
+                alt={activeSong.album}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -34,10 +39,10 @@ export default function NowPlayingSidebar({ currentSong, queue }: NowPlayingSide
             Queue
           </h3>
           <div className="space-y-2">
-            {queue.length === 0 ? (
+            {activeQueue.length === 0 ? (
               <p className="text-sm text-zinc-500 dark:text-zinc-500">No songs in queue</p>
             ) : (
-              queue.map((song, index) => (
+              activeQueue.map((song, index) => (
                 <div
                   key={song.id}
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"

@@ -7,16 +7,14 @@ import { Playlist, Song } from '@/types';
 import Sidebar from '@/components/layout/Sidebar';
 import NowPlayingSidebar from '@/components/layout/NowPlayingSidebar';
 import PlayerBar from '@/components/layout/PlayerBar';
+import { usePlayer } from '@/contexts/PlayerContext';
 import { supabase } from '@/lib/supabase';
 
 export default function SharedPlaylistPage() {
   const params = useParams();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentSong, setCurrentSong] = useState<Song | undefined>();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [queue, setQueue] = useState<Song[]>([]);
+  const player = usePlayer();
 
   useEffect(() => {
     const loadPlaylist = async () => {
@@ -31,7 +29,7 @@ export default function SharedPlaylistPage() {
           .single();
 
         if (error) throw error;
-        if (data) {
+          if (data) {
           // Handle jsonb[] array format
           let songs: Song[] = [];
           if (data.songs) {
@@ -51,7 +49,8 @@ export default function SharedPlaylistPage() {
             userId: data.user_id,
             isPublic: data.is_public,
           });
-          setQueue(songs);
+          // set the global player queue (don't autoplay)
+          player.setQueue(songs);
         }
       } catch (error) {
         console.error('Error loading shared playlist:', error);
@@ -138,9 +137,7 @@ export default function SharedPlaylistPage() {
                 <button
                   onClick={() => {
                     if (playlist.songs.length > 0) {
-                      setCurrentSong(playlist.songs[0]);
-                      setQueue(playlist.songs);
-                      setIsPlaying(true);
+                      player.play(playlist.songs[0], playlist.songs);
                     }
                   }}
                   className="px-6 py-3 rounded-full bg-yellow-500 hover:bg-yellow-600 text-zinc-900 font-semibold transition-colors flex items-center gap-2"
@@ -175,9 +172,7 @@ export default function SharedPlaylistPage() {
                     key={`${song.id}-${index}`}
                     className="flex items-center gap-4 p-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                     onClick={() => {
-                      setCurrentSong(song);
-                      setQueue(playlist.songs.slice(index));
-                      setIsPlaying(true);
+                      player.play(song, playlist.songs.slice(index));
                     }}
                   >
                     <span className="text-sm text-zinc-500 dark:text-zinc-400 w-8">
@@ -210,17 +205,9 @@ export default function SharedPlaylistPage() {
         </div>
       </main>
 
-      <NowPlayingSidebar currentSong={currentSong} queue={queue} />
+      <NowPlayingSidebar />
 
-      <PlayerBar
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying(!isPlaying)}
-        onNext={() => {}}
-        onPrevious={() => {}}
-        currentTime={currentTime}
-        duration={currentSong?.duration || 0}
-      />
+      <PlayerBar />
     </div>
   );
 }

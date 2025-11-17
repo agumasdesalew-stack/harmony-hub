@@ -13,7 +13,13 @@ type AnySong = {
   album?: string;
 };
 
-export default function AudioPreview({ song }: { song: AnySong }) {
+export default function AudioPreview({
+  song,
+  onPlay,
+}: {
+  song: AnySong;
+  onPlay?: () => void;
+}) {
   const [loadError, setLoadError] = useState(false);
 
   const preview = useMemo(() => {
@@ -59,6 +65,20 @@ export default function AudioPreview({ song }: { song: AnySong }) {
 
   // Render audio with multiple source types and CORS enabled. If the browser can't play it,
   // the onError handler will flip to the fallback UI.
+  // If a global onPlay handler is provided (to use the app's central player), prefer that.
+  if (onPlay) {
+    return (
+      <div className="mb-6">
+        <button
+          onClick={onPlay}
+          className="px-6 py-3 rounded-full bg-yellow-500 hover:bg-yellow-600 text-zinc-900 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Play Preview
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="mb-6">
       <audio

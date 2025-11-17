@@ -6,6 +6,7 @@ import NowPlayingSidebar from '@/components/layout/NowPlayingSidebar';
 import PlayerBar from '@/components/layout/PlayerBar';
 import SearchBar from '@/components/SearchBar';
 import SongCard from '@/components/SongCard';
+import SpotifyEmbed from '@/components/SpotifyEmbed';
 import CuratedPlaylistCard from '@/components/CuratedPlaylistCard';
 import { Song, Playlist } from '@/types';
 import { Search, Settings, Bell } from 'lucide-react';
@@ -13,6 +14,7 @@ import AuthButton from '@/components/AuthButton';
 import PlaylistCreator from '@/components/PlaylistCreator';
 import ThemeToggle from '@/components/ThemeToggle';
 import { usePlaylists } from '@/contexts/PlaylistContext';
+import { usePlayer } from '@/contexts/PlayerContext';
 
 export default function Home() {
   const [searchResults, setSearchResults] = useState<Song[]>([]);
@@ -20,10 +22,12 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [queue, setQueue] = useState<Song[]>([]);
+  const [embedTrackId, setEmbedTrackId] = useState<string | null>(null);
   const [showPlaylistCreator, setShowPlaylistCreator] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { playlists, createPlaylist } = usePlaylists();
+  const player = usePlayer();
 
   // Mock curated playlist
   const curatedPlaylist: Playlist = {
@@ -151,8 +155,14 @@ export default function Home() {
   };
 
   const handlePlaySong = (song: Song, sourceQueue: Song[] = []) => {
+    // use the player from top-level hooks (hooks must not be called inside nested functions)
     if (!song.previewUrl || !audioRef.current) {
-      setPlayerError('Spotify does not provide a playable preview for this track.');
+      // If no preview is available, show an embedded Spotify player on the Harmony page
+      // and set the global Now Playing so the player bar and sidebar show the track.
+      if (song.id) {
+        setEmbedTrackId(song.id);
+      }
+      player.setNowPlaying(song, [song, ...player.queue.filter((t) => t.id !== song.id)], false);
       return;
     }
 
@@ -173,8 +183,7 @@ export default function Home() {
     ];
 
     setQueue(orderedQueue);
-    setCurrentSong(song);
-    setIsPlaying(true);
+    player.play(song, orderedQueue);
     setPlayerError(null);
   };
 
@@ -375,17 +384,13 @@ export default function Home() {
         </div>
       </main>
 
-      <NowPlayingSidebar currentSong={currentSong} queue={queue} />
+      <NowPlayingSidebar />
 
-      <PlayerBar
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        onPlayPause={handleTogglePlay}
-        onNext={handleNext}
-        onPrevious={handlePrevious}
-        currentTime={currentTime}
-        duration={currentSong?.duration || 0}
-      />
+      {embedTrackId && (
+        <SpotifyEmbed trackId={embedTrackId} onClose={() => setEmbedTrackId(null)} />
+      )}
+
+      <PlayerBar />
 
       <PlaylistCreator
         isOpen={showPlaylistCreator}

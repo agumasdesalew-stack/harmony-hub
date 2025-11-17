@@ -8,7 +8,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import NowPlayingSidebar from '@/components/layout/NowPlayingSidebar';
 import PlayerBar from '@/components/layout/PlayerBar';
 import SongCard from '@/components/SongCard';
-import AudioPreview from '@/components/AudioPreview';
+import SpotifyEmbed from '@/components/SpotifyEmbed';
 
 export default function SongDetailsPage() {
   const params = useParams();
@@ -21,6 +21,7 @@ export default function SongDetailsPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [queue, setQueue] = useState<Song[]>([]);
+  const [embedTrackId, setEmbedTrackId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -156,7 +157,12 @@ export default function SongDetailsPage() {
   const handlePlayTrack = useCallback(
     (track: Song) => {
       if (!track.previewUrl || !audioRef.current) {
-        setErrorMessage('Spotify does not provide a playable preview for this track.');
+        // If no preview is available, show an embedded Spotify player on the Harmony page
+        // and set the global Now Playing so the player bar and sidebar show the track.
+        if (track.id) setEmbedTrackId(track.id);
+        setQueue([track, ...similarTracks.filter((t) => t.id !== track.id)]);
+        setCurrentSong(track);
+        setIsPlaying(false); // embed playback is controlled by the iframe
         return;
       }
 
@@ -197,16 +203,8 @@ export default function SongDetailsPage() {
             <div className="h-64 bg-zinc-800 rounded" />
           </div>
         </main>
-        <NowPlayingSidebar currentSong={currentSong} queue={queue} />
-        <PlayerBar
-          currentSong={currentSong}
-          isPlaying={isPlaying}
-          onPlayPause={() => setIsPlaying(!isPlaying)}
-          onNext={() => {}}
-          onPrevious={() => {}}
-          currentTime={currentTime}
-          duration={currentSong?.duration || 0}
-        />
+        <NowPlayingSidebar />
+        <PlayerBar />
       </div>
     );
   }
@@ -295,8 +293,6 @@ export default function SongDetailsPage() {
                   </a>
                 )}
               </div>
-              {/* Audio preview / fallback UI */}
-              <AudioPreview song={song as any} />
             </div>
           </div>
 
@@ -332,17 +328,13 @@ export default function SongDetailsPage() {
         </div>
       </main>
 
-      <NowPlayingSidebar currentSong={currentSong} queue={queue} />
+  <NowPlayingSidebar />
 
-      <PlayerBar
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        onPlayPause={handleTogglePlay}
-        onNext={() => {}}
-        onPrevious={() => {}}
-        currentTime={currentTime}
-        duration={currentSong?.duration || 0}
-      />
+      {embedTrackId && (
+        <SpotifyEmbed trackId={embedTrackId} onClose={() => setEmbedTrackId(null)} />
+      )}
+
+      <PlayerBar />
     </div>
   );
 }
