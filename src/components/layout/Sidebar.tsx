@@ -12,6 +12,7 @@ import {
   Heart,
   Folder,
 } from 'lucide-react';
+import UploadMusic from '@/components/UploadMusic';
 
 const navigationItems = [
   { name: 'Browse', href: '/', icon: Home },
@@ -24,7 +25,6 @@ const navigationItems = [
 const myMusicItems = [
   { name: 'Recently Played', href: '/recently-played', icon: Clock },
   { name: 'Favorite Songs', href: '/favorites', icon: Heart },
-  { name: 'Local File', href: '/local', icon: Folder },
 ];
 
 export default function Sidebar() {
@@ -36,6 +36,9 @@ export default function Sidebar() {
         <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
           Library
         </h2>
+        <div className="mb-4">
+          <UploadMusic />
+        </div>
         <nav className="space-y-1">
           {navigationItems.map((item) => {
             const Icon = item.icon;

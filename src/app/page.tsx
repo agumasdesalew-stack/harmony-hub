@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import NowPlayingSidebar from '@/components/layout/NowPlayingSidebar';
 import PlayerBar from '@/components/layout/PlayerBar';
@@ -18,14 +18,9 @@ import { usePlayer } from '@/contexts/PlayerContext';
 
 export default function Home() {
   const [searchResults, setSearchResults] = useState<Song[]>([]);
-  const [currentSong, setCurrentSong] = useState<Song | undefined>();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [queue, setQueue] = useState<Song[]>([]);
   const [embedTrackId, setEmbedTrackId] = useState<string | null>(null);
   const [showPlaylistCreator, setShowPlaylistCreator] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const { playlists, createPlaylist } = usePlaylists();
   const player = usePlayer();
 
@@ -72,65 +67,8 @@ export default function Home() {
     },
   ];
 
-  const initializeAudio = useCallback(() => {
-    if (!audioRef.current) {
-      const audio = new Audio();
-      audioRef.current = audio;
-      const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-      const handleEnded = () => setIsPlaying(false);
-      audio.addEventListener('timeupdate', handleTimeUpdate);
-      audio.addEventListener('ended', handleEnded);
-    }
-  }, []);
-
-  useEffect(() => {
-    initializeAudio();
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-      }
-    };
-  }, [initializeAudio]);
-
-  useEffect(() => {
-    if (!audioRef.current) return;
-    if (!currentSong?.previewUrl) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-      setCurrentTime(0);
-      return;
-    }
-
-    audioRef.current.src = currentSong.previewUrl;
-    audioRef.current.currentTime = 0;
-
-    if (isPlaying) {
-      audioRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch((err) => {
-          console.error('Audio playback failed:', err);
-          setIsPlaying(false);
-          setPlayerError('Unable to play preview. Please try again later.');
-        });
-    }
-  }, [currentSong?.id]);
-
-  useEffect(() => {
-    if (!audioRef.current) return;
-    if (!currentSong?.previewUrl) return;
-    if (isPlaying) {
-      audioRef.current
-        .play()
-        .catch((err) => {
-          console.error('Audio playback failed:', err);
-          setIsPlaying(false);
-        });
-    } else {
-      audioRef.current.pause();
-    }
-  }, [isPlaying, currentSong?.previewUrl]);
+  // Playback is handled by the global PlayerContext (`player`).
+  // This page should use `player.play`, `player.setNowPlaying`, and `player.setQueue`.
 
   const handleSearch = async (query: string) => {
     try {
@@ -156,7 +94,7 @@ export default function Home() {
 
   const handlePlaySong = (song: Song, sourceQueue: Song[] = []) => {
     // use the player from top-level hooks (hooks must not be called inside nested functions)
-    if (!song.previewUrl || !audioRef.current) {
+    if (!song.previewUrl) {
       // If no preview is available, show an embedded Spotify player on the Harmony page
       // and set the global Now Playing so the player bar and sidebar show the track.
       if (song.id) {
@@ -166,60 +104,22 @@ export default function Home() {
       return;
     }
 
-    const canPlay =
-      audioRef.current.canPlayType('audio/mpeg') ||
-      audioRef.current.canPlayType('audio/aac') ||
-      audioRef.current.canPlayType('audio/ogg');
-
-    if (!canPlay) {
-      setPlayerError('Your browser cannot play this preview format.');
-      return;
-    }
-
     const normalizedQueue = sourceQueue.length ? sourceQueue : [song];
-    const orderedQueue = [
-      song,
-      ...normalizedQueue.filter((queuedSong) => queuedSong.id !== song.id),
-    ];
-
-    setQueue(orderedQueue);
+    const orderedQueue = [song, ...normalizedQueue.filter((queuedSong) => queuedSong.id !== song.id)];
     player.play(song, orderedQueue);
     setPlayerError(null);
   };
 
   const handleTogglePlay = () => {
-    if (!currentSong?.previewUrl) {
+    if (!player.currentSong?.previewUrl) {
       setPlayerError('No preview available for this track.');
       return;
     }
-    setIsPlaying((prev) => !prev);
+    player.toggle();
   };
 
-  const handleNext = () => {
-    if (!currentSong || queue.length === 0) return;
-    const currentIndex = queue.findIndex((track) => track.id === currentSong.id);
-    const nextTrack = queue[currentIndex + 1];
-    if (nextTrack) {
-      handlePlaySong(nextTrack, queue);
-    } else {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    }
-  };
-
-  const handlePrevious = () => {
-    if (!currentSong || queue.length === 0) return;
-    const currentIndex = queue.findIndex((track) => track.id === currentSong.id);
-    const previousTrack = queue[currentIndex - 1];
-    if (previousTrack) {
-      handlePlaySong(previousTrack, queue);
-    } else {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-      }
-      setCurrentTime(0);
-    }
-  };
+  const handleNext = () => player.next();
+  const handlePrevious = () => player.previous();
 
   return (
     <div className="flex h-screen overflow-hidden">

@@ -3,10 +3,23 @@ export interface Song {
   name: string;
   artist: string;
   album: string;
-  albumArt: string;
+  albumArt: string; // URL to album art or cover image
+
+  // Playback URL for previews or local files (signed/public URL)
   previewUrl: string | null;
-  duration: number; // in seconds
+
+  // Duration in seconds
+  duration: number;
+
+  // Optional external/integration fields
   spotifyUrl?: string;
+
+  // Local-file metadata (optional)
+  fileName?: string;
+  filePath?: string;
+  fileSize?: number;
+  mimeType?: string;
+  uploadedAt?: string;
 }
 
 export interface Playlist {

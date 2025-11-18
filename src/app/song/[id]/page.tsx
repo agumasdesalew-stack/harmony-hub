@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { usePlayer } from '@/contexts/PlayerContext';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Heart, Share2, ExternalLink } from 'lucide-react';
 import { Song } from '@/types';
@@ -17,34 +18,12 @@ export default function SongDetailsPage() {
   const [similarTracks, setSimilarTracks] = useState<Song[]>([]);
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentSong, setCurrentSong] = useState<Song | undefined>();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [queue, setQueue] = useState<Song[]>([]);
   const [embedTrackId, setEmbedTrackId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const player = usePlayer();
 
-  const initializeAudio = useCallback(() => {
-    if (!audioRef.current) {
-      const audio = new Audio();
-      audioRef.current = audio;
-      const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-      const handleEnded = () => setIsPlaying(false);
-      audio.addEventListener('timeupdate', handleTimeUpdate);
-      audio.addEventListener('ended', handleEnded);
-    }
-  }, []);
-
-  useEffect(() => {
-    initializeAudio();
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-      }
-    };
-  }, [initializeAudio]);
+  // Audio playback is managed by the global PlayerContext (player).
+  // This page should not create its own audio element or local playback state.
 
   useEffect(() => {
     const fetchSong = async () => {
@@ -72,8 +51,9 @@ export default function SongDetailsPage() {
           duration: Math.floor(trackData.duration_ms / 1000),
           spotifyUrl: trackData.external_urls?.spotify,
         };
-        setSong(mainSong);
-        setQueue([mainSong]);
+  setSong(mainSong);
+  // populate global player queue (no autoplay)
+  player.setQueue([mainSong]);
 
         if (trackData.artists?.length) {
           const primaryArtist = trackData.artists[0]?.name;
@@ -115,81 +95,33 @@ export default function SongDetailsPage() {
     fetchSong();
   }, [params.id]);
 
-  useEffect(() => {
-    if (!audioRef.current) return;
-    if (!currentSong?.previewUrl) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-      setCurrentTime(0);
-      return;
-    }
+  // Playback handled by PlayerContext; no local audio element here.
 
-    audioRef.current.src = currentSong.previewUrl;
-    audioRef.current.currentTime = 0;
-
-    if (isPlaying) {
-      audioRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch((err) => {
-          console.error('Audio playback failed:', err);
-          setIsPlaying(false);
-          setErrorMessage('Unable to play preview. Please try again later.');
-        });
-    }
-  }, [currentSong?.id]);
-
-  useEffect(() => {
-    if (!audioRef.current) return;
-    if (!currentSong?.previewUrl) return;
-    if (isPlaying) {
-      audioRef.current
-        .play()
-        .catch((err) => {
-          console.error('Audio playback failed:', err);
-          setIsPlaying(false);
-        });
-    } else {
-      audioRef.current.pause();
-    }
-  }, [isPlaying, currentSong?.previewUrl]);
+  // Playback handled by PlayerContext; no local audio element here.
 
   const handlePlayTrack = useCallback(
     (track: Song) => {
-      if (!track.previewUrl || !audioRef.current) {
-        // If no preview is available, show an embedded Spotify player on the Harmony page
-        // and set the global Now Playing so the player bar and sidebar show the track.
+      const orderedQueue = [track, ...similarTracks.filter((t) => t.id !== track.id)];
+      if (!track.previewUrl) {
         if (track.id) setEmbedTrackId(track.id);
-        setQueue([track, ...similarTracks.filter((t) => t.id !== track.id)]);
-        setCurrentSong(track);
-        setIsPlaying(false); // embed playback is controlled by the iframe
+        // set now playing in the global player but don't autoplay (embed will handle playback)
+        player.setNowPlaying(track, orderedQueue, false);
         return;
       }
 
-      const canPlay =
-        audioRef.current.canPlayType('audio/mpeg') ||
-        audioRef.current.canPlayType('audio/aac') ||
-        audioRef.current.canPlayType('audio/ogg');
-
-      if (!canPlay) {
-        setErrorMessage('Your browser cannot play this preview format.');
-        return;
-      }
-
-      setCurrentSong(track);
-      setQueue([track, ...similarTracks.filter((t) => t.id !== track.id)]);
-      setIsPlaying(true);
+      // Use global player for preview playback
+      player.play(track, orderedQueue);
       setErrorMessage(null);
     },
-    [similarTracks]
+    [similarTracks, player]
   );
 
   const handleTogglePlay = () => {
-    if (!currentSong?.previewUrl) {
+    if (!player.currentSong?.previewUrl) {
       setErrorMessage('No preview available for this track.');
       return;
     }
-    setIsPlaying((prev) => !prev);
+    player.toggle();
   };
 
   if (isLoading) {
@@ -260,18 +192,17 @@ export default function SongDetailsPage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() =>
-                    currentSong?.id === song.id && isPlaying
+                    player.currentSong?.id === song.id && player.isPlaying
                       ? handleTogglePlay()
                       : handlePlayTrack(song)
                   }
-                  className="px-6 py-3 rounded-full bg-yellow-500 hover:bg-yellow-600 text-zinc-900 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!song.previewUrl}
+                  className="px-6 py-3 rounded-full bg-yellow-500 hover:bg-yellow-600 text-zinc-900 font-semibold transition-colors"
                 >
                   {song.previewUrl
-                    ? currentSong?.id === song.id && isPlaying
+                    ? player.currentSong?.id === song.id && player.isPlaying
                       ? 'Pause'
                       : 'Play'
-                    : 'Preview Unavailable'}
+                    : 'Play'}
                 </button>
                 <button className="p-3 rounded-full bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors">
                   <Heart size={20} className="text-zinc-900 dark:text-white" />
